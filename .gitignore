@@ -1,9 +1,43 @@
-node_modules/
+# Dependencies
+**/node_modules/
+
+# Expo
+**/.expo/
+**/dist/
+**/web-build/
+
+# Android generated files
+**/.gradle/
+**/.cxx/
+**/android/build/
+**/android/app/build/
+**/android/local.properties
+
+# iOS generated files
+**/ios/Pods/
+**/ios/build/
+
+# Environment variables and secrets
 .env
-.env.local
-dist/
-build/
-.expo/
-.expo-shared/
+.env.*
+!.env.example
+
+# Signing credentials
+*.jks
+*.keystore
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Logs and temporary files
 *.log
+*.tmp
+*.bak
+
+# TypeScript
+*.tsbuildinfo
+
+# Operating system
 .DS_Store
+Thumbs.db
