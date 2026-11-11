@@ -1,0 +1,364 @@
+
+========== src\auth\auth.controller.ts ==========
+
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  UseGuards,
+  UsePipes,
+  ValidationPipe,
+} from "@nestjs/common";
+import { AuthService } from "./auth.service.js";
+import { RegisterDto } from "./dto/register.dto.js";
+import { LoginDto } from "./dto/login.dto.js";
+import {
+  JwtAuthGuard,
+  type AuthenticatedUser,
+} from "./guards/jwt-auth.guard.js";
+import { CurrentUser } from "./decorators/current-user.decorator.js";
+
+@Controller("auth")
+@UsePipes(
+  new ValidationPipe({
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    transform: true,
+  }),
+)
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
+
+  @Post("register")
+  register(@Body() dto: RegisterDto) {
+    return this.authService.register(dto);
+  }
+
+  @Post("login")
+  login(@Body() dto: LoginDto) {
+    return this.authService.login(dto);
+  }
+
+  @Get("me")
+  @UseGuards(JwtAuthGuard)
+  getMe(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.getProfile(user.userId);
+  }
+}
+
+========== src\auth\auth.service.ts ==========
+
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { compare, hash } from "bcryptjs";
+import { PrismaService } from "../prisma/prisma.service.js";
+import { RegisterDto } from "./dto/register.dto.js";
+import { LoginDto } from "./dto/login.dto.js";
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  async register(dto: RegisterDto) {
+    const email = dto.email?.trim().toLowerCase() || null;
+    const phone = dto.phone ? this.normalizePhone(dto.phone) : null;
+
+    if (!email && !phone) {
+      throw new BadRequestException(
+        "Provide an email address or phone number.",
+      );
+    }
+
+    try {
+      const user = await this.prisma.user.create({
+        data: {
+          fullName: dto.fullName.trim(),
+          email,
+          phone,
+          passwordHash: await hash(dto.password, 12),
+        },
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          phone: true,
+        },
+      });
+
+      return this.createSession(user);
+    } catch (error) {
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        error.code === "P2002"
+      ) {
+        throw new ConflictException(
+          "An account with this email address or phone number already exists.",
+        );
+      }
+
+      throw error;
+    }
+  }
+
+  async login(dto: LoginDto) {
+    const identifier = dto.identifier.trim();
+    const isEmail = identifier.includes("@");
+
+    const user = isEmail
+      ? await this.prisma.user.findUnique({
+          where: { email: identifier.toLowerCase() },
+        })
+      : await this.prisma.user.findUnique({
+          where: { phone: this.normalizePhone(identifier) },
+        });
+
+    if (!user || !(await compare(dto.password, user.passwordHash))) {
+      throw new UnauthorizedException("Invalid email/phone or password.");
+    }
+
+    if (!user.isActive) {
+      throw new ForbiddenException("This account is currently inactive.");
+    }
+
+    return this.createSession({
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      phone: user.phone,
+    });
+  }
+
+  async getProfile(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        phone: true,
+        isActive: true,
+        createdAt: true,
+        providerProfile: {
+          select: {
+            status: true,
+            isAvailable: true,
+          },
+        },
+      },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException("User account is unavailable.");
+    }
+
+    const { isActive, ...profile } = user;
+    return profile;
+  }
+
+  private async createSession(user: {
+    id: string;
+    fullName: string;
+    email: string | null;
+    phone: string | null;
+  }) {
+    const accessToken = await this.jwtService.signAsync({
+      sub: user.id,
+    });
+
+    return {
+      accessToken,
+      user,
+    };
+  }
+
+  private normalizePhone(phone: string): string {
+    return phone.replace(/[\s()-]/g, "");
+  }
+}
+
+========== src\auth\auth.module.ts ==========
+
+import { Module } from "@nestjs/common";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { JwtModule } from "@nestjs/jwt";
+import { AuthController } from "./auth.controller.js";
+import { AuthService } from "./auth.service.js";
+import { JwtAuthGuard } from "./guards/jwt-auth.guard.js";
+
+@Module({
+  imports: [
+    ConfigModule,
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.getOrThrow<string>("JWT_SECRET"),
+        signOptions: {
+          expiresIn: 86400,
+        },
+      }),
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [AuthService, JwtAuthGuard],
+  exports: [AuthService, JwtAuthGuard],
+})
+export class AuthModule {}
+
+========== src\auth\guards\jwt-auth.guard.ts ==========
+
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+
+export interface AuthenticatedUser {
+  userId: string;
+}
+
+interface RequestWithUser {
+  headers: {
+    authorization?: string;
+  };
+  user?: AuthenticatedUser;
+}
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(private readonly jwtService: JwtService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request =
+      context.switchToHttp().getRequest<RequestWithUser>();
+
+    const authorization = request.headers.authorization;
+    const [scheme, token] = authorization?.split(" ") ?? [];
+
+    if (scheme?.toLowerCase() !== "bearer" || !token) {
+      throw new UnauthorizedException("Authentication token is required.");
+    }
+
+    try {
+      const payload = await this.jwtService.verifyAsync<{ sub: string }>(token);
+
+      if (!payload.sub) {
+        throw new UnauthorizedException("Invalid authentication token.");
+      }
+
+      request.user = { userId: payload.sub };
+      return true;
+    } catch {
+      throw new UnauthorizedException(
+        "Invalid or expired authentication token.",
+      );
+    }
+  }
+}
+
+========== src\app.module.ts ==========
+
+import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { AppController } from "./app.controller.js";
+import { AppService } from "./app.service.js";
+import { AiRequestsModule } from "./ai-requests/ai-requests.module.js";
+import { PrismaModule } from "./prisma/prisma.module.js";
+import { AuthModule } from "./auth/auth.module.js";
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+    }),
+    PrismaModule,
+    AuthModule,
+    AiRequestsModule,
+  ],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
+
+========== package.json ==========
+
+{
+  "name": "atys-backend",
+  "version": "0.0.1",
+  "description": "",
+  "author": "",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "build": "nest build",
+    "deploy": "nest deploy",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/main",
+    "lint": "oxlint --type-aware src/ test/",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:cov": "vitest run --coverage",
+    "test:debug": "vitest --inspect-brk --no-file-parallelism",
+    "test:e2e": "vitest run --config ./vitest.config.e2e.ts"
+  },
+  "dependencies": {
+    "@google/genai": "^2.32.0",
+    "@nestjs/common": "^12.0.1",
+    "@nestjs/config": "^12.0.1",
+    "@nestjs/core": "^12.0.1",
+    "@nestjs/jwt": "^12.0.4",
+    "@nestjs/platform-express": "^12.0.1",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "@types/uuid": "^10.0.0",
+    "axios": "^1.21.0",
+    "bcryptjs": "^3.0.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "dotenv": "^18.0.9",
+    "groq-sdk": "^1.6.0",
+    "pg": "^8.23.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "uuid": "^14.0.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^12.0.0",
+    "@nestjs/mau": "^0.2.6",
+    "@nestjs/schematics": "^12.0.0",
+    "@nestjs/testing": "^12.0.1",
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.0.0",
+    "@vitest/coverage-v8": "^4.1.2",
+    "oxlint": "^1.58.0",
+    "oxlint-tsgolint": "^7.0.2001",
+    "prettier": "^3.4.2",
+    "prisma": "^7.10.1",
+    "source-map-support": "^0.5.21",
+    "supertest": "^7.0.0",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.0",
+    "vitest": "^4.1.2"
+  }
+}

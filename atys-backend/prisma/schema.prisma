@@ -1,0 +1,95 @@
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ProviderStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id           String  @id @default(uuid())
+  fullName     String
+  email        String? @unique
+  phone        String? @unique
+  passwordHash String
+
+  emailVerifiedAt DateTime?
+  phoneVerifiedAt DateTime?
+
+  isActive Boolean @default(true)
+
+  providerProfile ProviderProfile?
+  refreshSessions RefreshSession[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RefreshSession {
+  id        String   @id @default(uuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model ProviderProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+
+  bio         String?
+  status      ProviderStatus @default(PENDING)
+  isAvailable Boolean        @default(false)
+
+  submittedAt     DateTime?
+  approvedAt      DateTime?
+  rejectionReason String?
+
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills       ProviderSkill[]
+  serviceAreas ServiceArea[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProviderSkill {
+  id                String @id @default(uuid())
+  providerProfileId String
+  name              String
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([providerProfileId, name])
+}
+
+model ServiceArea {
+  id                String @id @default(uuid())
+  providerProfileId String
+
+  city String
+  area String
+
+  providerProfile ProviderProfile @relation(fields: [providerProfileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([providerProfileId, city, area])
+}
