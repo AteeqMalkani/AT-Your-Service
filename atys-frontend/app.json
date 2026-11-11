@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "ATYS",
+    "slug": "atys-frontend",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.atys.requestagent"
+    },
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow ATYS to use your microphone for voice requests.",
+          "speechRecognitionPermission": "Allow ATYS to transcribe your spoken requests."
+        }
+      ]
+    ],
+    "scheme": "atys"
+  }
+}
