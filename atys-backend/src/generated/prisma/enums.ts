@@ -16,3 +16,11 @@ export const ProviderStatus = {
 } as const
 
 export type ProviderStatus = (typeof ProviderStatus)[keyof typeof ProviderStatus]
+
+
+export const AccountRole = {
+  USER: 'USER',
+  ADMIN: 'ADMIN'
+} as const
+
+export type AccountRole = (typeof AccountRole)[keyof typeof AccountRole]
