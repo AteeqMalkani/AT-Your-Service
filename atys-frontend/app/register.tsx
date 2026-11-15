@@ -29,6 +29,53 @@ const COLORS = {
   error: "#B83D3D",
 };
 
+function getRegistrationError(err: unknown): string {
+  if (!axios.isAxiosError(err)) {
+    return "Unable to create your account. Please try again.";
+  }
+
+  if (!err.response) {
+    return "Unable to connect to ATYS. Please check your internet connection and try again.";
+  }
+
+  const status = err.response.status;
+  const backendMessage = err.response.data?.message;
+
+  if (status === 409) {
+    return "An account with this email or phone number already exists. Please sign in instead.";
+  }
+
+  if (status === 400) {
+    if (Array.isArray(backendMessage)) {
+      return backendMessage.join("\n");
+    }
+
+    return typeof backendMessage === "string"
+      ? backendMessage
+      : "Please check your information and try again.";
+  }
+
+  if (status === 401) {
+    return "Your registration request could not be authenticated. Please try again.";
+  }
+
+  if (status === 403) {
+    return "You are not authorized to perform this action.";
+  }
+
+  if (status === 429) {
+    return "Too many attempts. Please wait a moment before trying again.";
+  }
+
+  if (status >= 500) {
+    return "Something went wrong on our server. Please try again later.";
+  }
+
+  return typeof backendMessage === "string"
+    ? backendMessage
+    : "Unable to create your account. Please try again.";
+}
+
 export default function RegisterScreen() {
   const { signUp, isLoading, user } = useAuth();
 
@@ -50,8 +97,12 @@ export default function RegisterScreen() {
   }, [isLoading, user]);
 
   const handleRegister = async () => {
+    if (submitting) return;
+
     const normalizedName = fullName.trim();
     const normalizedContact = contact.trim();
+
+    setError("");
 
     if (
       !normalizedName ||
@@ -76,7 +127,6 @@ export default function RegisterScreen() {
     const isEmail = normalizedContact.includes("@");
 
     setSubmitting(true);
-    setError("");
 
     try {
       await signUp({
@@ -88,16 +138,8 @@ export default function RegisterScreen() {
       });
 
       router.replace("/");
-    } catch (err) {
-      const message = axios.isAxiosError(err)
-        ? err.response?.data?.message
-        : undefined;
-
-      setError(
-        Array.isArray(message)
-          ? message.join("\n")
-          : message || "Unable to create your account. Please try again.",
-      );
+    } catch (err: unknown) {
+      setError(getRegistrationError(err));
     } finally {
       setSubmitting(false);
     }
@@ -135,13 +177,12 @@ export default function RegisterScreen() {
             </View>
           </View>
 
-          {/* 3D-inspired illustration */}
+          {/* Hero illustration */}
           <View style={styles.hero}>
             <View style={styles.heroGlow} />
             <View style={styles.backCircle} />
             <View style={styles.middleCircle} />
 
-            {/* Main people illustration */}
             <View style={styles.illustration}>
               <View style={styles.personBack}>
                 <View style={styles.personBackHead} />
@@ -163,7 +204,6 @@ export default function RegisterScreen() {
               </View>
             </View>
 
-            {/* Floating symbols */}
             <View style={[styles.floatingIcon, styles.iconLeft]}>
               <Text style={styles.floatingEmoji}>🏠</Text>
             </View>
@@ -176,7 +216,6 @@ export default function RegisterScreen() {
               <Text style={styles.floatingEmoji}>🔧</Text>
             </View>
 
-            {/* Decorative details */}
             <View style={styles.dotOne} />
             <View style={styles.dotTwo} />
             <View style={styles.dotThree} />
@@ -325,16 +364,31 @@ export default function RegisterScreen() {
                 </View>
               </View>
 
-              {/* Error */}
+              {/* Error message */}
               {!!error && (
                 <View style={styles.errorContainer}>
-                  <Text style={styles.errorText}>{error}</Text>
+                  <Text style={styles.errorIcon}>!</Text>
+                  <View style={styles.errorContent}>
+                    <Text style={styles.errorTitle}>Registration failed</Text>
+                    <Text style={styles.errorText}>{error}</Text>
+
+                    {error.includes("already exists") && (
+                      <TouchableOpacity
+                        onPress={() => router.replace("/login")}
+                        style={styles.errorAction}
+                      >
+                        <Text style={styles.errorActionText}>
+                          Sign in instead →
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
               )}
 
               {/* Submit */}
               <Button
-                title="Create Account"
+                title={submitting ? "Creating account..." : "Create Account"}
                 onPress={handleRegister}
                 loading={submitting}
                 disabled={submitting}
@@ -397,8 +451,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
 
-  // Brand
-
   brandRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -440,8 +492,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     marginTop: 2,
   },
-
-  // Hero illustration
 
   hero: {
     height: 190,
@@ -488,8 +538,6 @@ const styles = StyleSheet.create({
     marginTop: -10,
   },
 
-  // Back person
-
   personBack: {
     position: "absolute",
     left: 5,
@@ -522,8 +570,6 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 5,
   },
-
-  // Front person
 
   personFront: {
     position: "absolute",
@@ -599,8 +645,6 @@ const styles = StyleSheet.create({
   handEmoji: {
     fontSize: 21,
   },
-
-  // Floating elements
 
   floatingIcon: {
     position: "absolute",
@@ -695,8 +739,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.1,
   },
 
-  // Heading
-
   intro: {
     marginTop: 4,
     marginBottom: 19,
@@ -719,8 +761,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 8,
   },
-
-  // Form
 
   formCard: {
     backgroundColor: COLORS.surface,
@@ -815,11 +855,38 @@ const styles = StyleSheet.create({
   },
 
   errorContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
     backgroundColor: "#FFF0EF",
     borderRadius: 10,
-    padding: 11,
+    padding: 12,
     borderWidth: 1,
     borderColor: "#F5D9D6",
+    gap: 10,
+  },
+
+  errorIcon: {
+    width: 21,
+    height: 21,
+    borderRadius: 11,
+    overflow: "hidden",
+    textAlign: "center",
+    textAlignVertical: "center",
+    color: "#FFFFFF",
+    backgroundColor: COLORS.error,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  errorContent: {
+    flex: 1,
+  },
+
+  errorTitle: {
+    color: COLORS.error,
+    fontSize: 12,
+    fontWeight: "900",
+    marginBottom: 4,
   },
 
   errorText: {
@@ -828,13 +895,22 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
+  errorAction: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+  },
+
+  errorActionText: {
+    color: COLORS.primary,
+    fontSize: 12,
+    fontWeight: "900",
+  },
+
   primaryButton: {
     backgroundColor: COLORS.primary,
     borderRadius: 13,
     marginTop: 3,
   },
-
-  // Footer
 
   footerRow: {
     flexDirection: "row",
