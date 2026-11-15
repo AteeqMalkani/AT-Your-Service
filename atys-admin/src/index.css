@@ -1,0 +1,58 @@
+@import 'tailwindcss';
+
+/* ATYS Design Tokens */
+@theme inline {
+  --color-atys-primary: var(--atys-primary);
+  --color-atys-primary-hover: var(--atys-primary-hover);
+  --color-atys-client: var(--atys-client);
+  --color-atys-provider: var(--atys-provider);
+
+  --color-atys-background: var(--atys-background);
+  --color-atys-surface: var(--atys-surface);
+  --color-atys-text: var(--atys-text);
+  --color-atys-muted: var(--atys-muted);
+  --color-atys-border: var(--atys-border);
+}
+
+:root {
+  /* Admin */
+  --atys-primary: #006b4f;
+  --atys-primary-hover: #00543e;
+
+  /* User modes */
+  --atys-client: #12866d;
+  --atys-provider: #2367b5;
+
+  /* Shared colors */
+  --atys-background: #f4f7f6;
+  --atys-surface: #ffffff;
+  --atys-text: #172033;
+  --atys-muted: #64748b;
+  --atys-border: #e2e8f0;
+
+  font-family: Inter, system-ui, sans-serif;
+  color: var(--atys-text);
+  background: var(--atys-background);
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
