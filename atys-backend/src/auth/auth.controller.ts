@@ -1,12 +1,4 @@
-﻿import {
-  Body,
-  Controller,
-  Get,
-  Post,
-  UseGuards,
-  UsePipes,
-  ValidationPipe,
-} from '@nestjs/common';
+﻿import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 
 import { AuthService } from './auth.service.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -21,13 +13,6 @@ import {
 import { CurrentUser } from './decorators/current-user.decorator.js';
 
 @Controller('auth')
-@UsePipes(
-  new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-  }),
-)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
