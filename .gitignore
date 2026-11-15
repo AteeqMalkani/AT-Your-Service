@@ -41,3 +41,5 @@
 # Operating system
 .DS_Store
 Thumbs.db
+
+db-backups
