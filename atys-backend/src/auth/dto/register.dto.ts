@@ -1,11 +1,12 @@
-﻿import {
+﻿import { Transform } from 'class-transformer';
+import {
   IsEmail,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
   MinLength,
-} from "class-validator";
+} from 'class-validator';
 
 export class RegisterDto {
   @IsString()
@@ -14,6 +15,7 @@ export class RegisterDto {
   fullName!: string;
 
   @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsEmail()
   email?: string;
 

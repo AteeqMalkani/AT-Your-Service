@@ -58,8 +58,35 @@ export class AuthService {
         'code' in error &&
         error.code === 'P2002'
       ) {
+        const meta =
+          'meta' in error &&
+          typeof error.meta === 'object' &&
+          error.meta !== null
+            ? error.meta
+            : undefined;
+
+        const target = meta && 'target' in meta ? meta.target : undefined;
+
+        const fields = Array.isArray(target)
+          ? target.map(String)
+          : typeof target === 'string'
+            ? [target]
+            : [];
+
+        if (fields.includes('email')) {
+          throw new ConflictException(
+            'This email address is already registered. Please log in instead.',
+          );
+        }
+
+        if (fields.includes('phone')) {
+          throw new ConflictException(
+            'This phone number is already registered.',
+          );
+        }
+
         throw new ConflictException(
-          'An account with this email address or phone number already exists.',
+          'An account with these details already exists.',
         );
       }
 
@@ -124,10 +151,8 @@ export class AuthService {
     const newTokenHash = this.hashRefreshToken(newRefreshToken);
     const newExpiry = this.getRefreshTokenExpiry();
 
-    // Generate the access token before rotating the database session.
     const accessToken = await this.createAccessToken(session.user.id);
 
-    // Conditional update ensures only one concurrent refresh can succeed.
     const rotation = await this.prisma.refreshSession.updateMany({
       where: {
         id: session.id,
